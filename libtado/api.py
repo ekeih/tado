@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 """libtado
 
 This module provides bindings to the API of https://www.tado.com/ to control
@@ -35,71 +33,80 @@ License:
 import json
 import requests
 
+
 class Tado:
-  headers        = { 'Referer' : 'https://my.tado.com/' }
-  access_headers = headers
-  api            = 'https://my.tado.com/api/v2'
+    headers = {"Referer": "https://my.tado.com/"}
+    access_headers = headers
+    api = "https://my.tado.com/api/v2"
 
-  def __init__(self, username, password, secret):
-    self.username = username
-    self.password = password
-    self.secret = secret
-    self._login()
-    self.id = self.get_me()['homes'][0]['id']
+    def __init__(self, username, password, secret):
+        self.username = username
+        self.password = password
+        self.secret = secret
+        self._login()
+        self.id = self.me()["homes"][0]["id"]
 
-  def _login(self):
-    """Login and setup the HTTP session."""
-    self.session = requests.Session()
-    url='https://auth.tado.com/oauth/token'
-    data = { 'client_id'     : 'tado-web-app',
-             'client_secret' : self.secret,
-             'grant_type'    : 'password',
-             'password'      : self.password,
-             'scope'         : 'home.user',
-             'username'      : self.username }
-    request = self.session.post(url, data=data, headers=self.access_headers)
-    response = request.json()
-    self.access_token = response['access_token']
-    self.refresh_token = response['refresh_token']
-    self.access_headers['Authorization'] = 'Bearer ' + response['access_token']
-    # We need to talk to api v1 to get a JSESSIONID cookie
-    self.session.get('https://my.tado.com/api/v1/me', headers=self.access_headers)
+    def _login(self):
+        """Login and setup the HTTP session."""
+        self.session = requests.Session()
+        url = "https://auth.tado.com/oauth/token"
+        data = {
+            "client_id": "tado-web-app",
+            "client_secret": self.secret,
+            "grant_type": "password",
+            "password": self.password,
+            "scope": "home.user",
+            "username": self.username,
+        }
+        request = self.session.post(url, data=data, headers=self.access_headers)
+        response = request.json()
+        self.access_token = response["access_token"]
+        self.refresh_token = response["refresh_token"]
+        self.access_headers["Authorization"] = "Bearer " + response["access_token"]
+        # We need to talk to api v1 to get a JSESSIONID cookie
+        self.session.get("https://my.tado.com/api/v1/me", headers=self.access_headers)
 
-  def _api_call(self, cmd, data=False, method='GET'):
-    """Perform an API call."""
-    def call_delete(url):
-      return self.session.delete(url, headers=self.access_headers)
-    def call_put(url, data):
-      return self.session.put(url, headers=self.access_headers, data=json.dumps(data))
-    def call_get(url):
-      return self.session.get(url, headers=self.access_headers)
+    def _api_call(self, cmd, data=False, method="GET"):
+        """Perform an API call."""
 
-    url = '%s/%s' % (self.api, cmd)
-    if method == 'DELETE':
-      return call_delete(url)
-    elif method == 'PUT' and data:
-      return call_put(url, data).json()
-    elif method == 'GET':
-      return call_get(url).json()
+        def call_delete(url):
+            return self.session.delete(url, headers=self.access_headers)
 
-  def refresh_auth(self):
-    """Refresh an active session."""
-    url='https://auth.tado.com/oauth/token'
-    data = { 'client_id'     : 'tado-web-app',
-             'client_secret' : self.secret,
-             'grant_type'    : 'refresh_token',
-             'refresh_token' : self.refresh_token,
-             'scope'         : 'home.user'
-           }
-    request = self.session.post(url, data=data, headers=self.headers)
-    request.raise_for_status()
-    response = request.json()
-    self.access_token = response['access_token']
-    self.refresh_token = response['refresh_token']
-    self.access_headers['Authorization'] = 'Bearer ' + self.access_token
+        def call_put(url, data):
+            return self.session.put(
+                url, headers=self.access_headers, data=json.dumps(data)
+            )
 
-  def get_capabilities(self, zone):
-    """
+        def call_get(url):
+            return self.session.get(url, headers=self.access_headers)
+
+        url = "%s/%s" % (self.api, cmd)
+        if method == "DELETE":
+            return call_delete(url)
+        elif method == "PUT" and data:
+            return call_put(url, data).json()
+        elif method == "GET":
+            return call_get(url).json()
+
+    def refresh_auth(self):
+        """Refresh an active session."""
+        url = "https://auth.tado.com/oauth/token"
+        data = {
+            "client_id": "tado-web-app",
+            "client_secret": self.secret,
+            "grant_type": "refresh_token",
+            "refresh_token": self.refresh_token,
+            "scope": "home.user",
+        }
+        request = self.session.post(url, data=data, headers=self.headers)
+        request.raise_for_status()
+        response = request.json()
+        self.access_token = response["access_token"]
+        self.refresh_token = response["refresh_token"]
+        self.access_headers["Authorization"] = "Bearer " + self.access_token
+
+    def get_capabilities(self, zone):
+        """
     Args:
       zone (int): The zone ID.
 
@@ -119,11 +126,12 @@ class Tado:
       }
 
     """
-    data = self._api_call('homes/%i/zones/%i/capabilities' % (self.id, zone))
-    return data
+        data = self._api_call("homes/%i/zones/%i/capabilities" % (self.id, zone))
+        return data
 
-  def get_devices(self):
-    """
+    @property
+    def devices(self):
+        """
     Returns:
       list: All devices of the home as a list of dictionaries.
 
@@ -196,11 +204,11 @@ class Tado:
         }
       ]
     """
-    data = self._api_call('homes/%i/devices' % self.id)
-    return data
+        data = self._api_call("homes/%i/devices" % self.id)
+        return data
 
-  def get_early_start(self, zone):
-    """
+    def get_early_start(self, zone):
+        """
     Get the early start configuration of a zone.
 
     Args:
@@ -215,11 +223,12 @@ class Tado:
 
       { 'enabled': True }
     """
-    data = self._api_call('homes/%i/zones/%i/earlyStart' % (self.id, zone))
-    return data
+        data = self._api_call("homes/%i/zones/%i/earlyStart" % (self.id, zone))
+        return data
 
-  def get_home(self):
-    """
+    @property
+    def home(self):
+        """
     Get information about the home.
 
     Returns:
@@ -256,11 +265,12 @@ class Tado:
         'temperatureUnit': 'CELSIUS'
       }
     """
-    data = self._api_call('homes/%i' % self.id)
-    return data
+        data = self._api_call("homes/%i" % self.id)
+        return data
 
-  def get_installations(self):
-    """
+    @property
+    def installations(self):
+        """
     It is unclear what this does.
 
     Returns:
@@ -272,11 +282,12 @@ class Tado:
 
       []
     """
-    data = self._api_call('homes/%i/installations' % self.id)
-    return data
+        data = self._api_call("homes/%i/installations" % self.id)
+        return data
 
-  def get_invitations(self):
-    """
+    @property
+    def invitations(self):
+        """
     Get active invitations.
 
     Returns:
@@ -331,11 +342,12 @@ class Tado:
       ]
     """
 
-    data = self._api_call('homes/%i/invitations' % self.id)
-    return data
+        data = self._api_call("homes/%i/invitations" % self.id)
+        return data
 
-  def get_me(self):
-    """
+    @property
+    def me(self):
+        """
     Get information about the current user.
 
     Returns:
@@ -361,16 +373,17 @@ class Tado:
       }
     """
 
-    data = self._api_call('me')
-    return data
+        data = self._api_call("me")
+        return data
 
-  def get_mobile_devices(self):
-    """Get all mobile devices."""
-    data = self._api_call('homes/%i/mobileDevices' % self.id)
-    return data
+    @property
+    def mobile_devices(self):
+        """Get all mobile devices."""
+        data = self._api_call("homes/%i/mobileDevices" % self.id)
+        return data
 
-  def get_schedule(self, zone):
-    """
+    def get_schedule(self, zone):
+        """
     Get the type of the currently configured schedule of a zone.
 
     Args:
@@ -396,11 +409,13 @@ class Tado:
       }
     """
 
-    data = self._api_call('homes/%i/zones/%i/schedule/activeTimetable' % (self.id, zone))
-    return data
+        data = self._api_call(
+            "homes/%i/zones/%i/schedule/activeTimetable" % (self.id, zone)
+        )
+        return data
 
-  def get_state(self, zone):
-    """
+    def get_state(self, zone):
+        """
     Get the current state of a zone including its desired and current temperature. Check out the example output for more.
 
     Args:
@@ -456,16 +471,16 @@ class Tado:
       }
     """
 
-    data = self._api_call('homes/%i/zones/%i/state' % (self.id, zone))
-    return data
+        data = self._api_call("homes/%i/zones/%i/state" % (self.id, zone))
+        return data
 
-  def get_users(self):
-    """Get all users of your home."""
-    data = self._api_call('homes/%i/users' % self.id)
-    return data
+    def get_users(self):
+        """Get all users of your home."""
+        data = self._api_call("homes/%i/users" % self.id)
+        return data
 
-  def get_weather(self):
-    """
+    def get_weather(self):
+        """
     Get the current weather of the location of your home.
 
     Returns:
@@ -499,11 +514,12 @@ class Tado:
       }
     """
 
-    data = self._api_call('homes/%i/weather' % self.id)
-    return data
+        data = self._api_call("homes/%i/weather" % self.id)
+        return data
 
-  def get_zones(self):
-    """
+    @property
+    def zones(self):
+        """
     Get all zones of your home.
 
     Returns:
@@ -577,11 +593,11 @@ class Tado:
 
     """
 
-    data = self._api_call('homes/%i/zones' % self.id)
-    return data
+        data = self._api_call("homes/%i/zones" % self.id)
+        return data
 
-  def set_early_start(self, zone, enabled):
-    """
+    def set_early_start(self, zone, enabled):
+        """
     Enable or disable the early start feature of a zone.
 
     Args:
@@ -598,15 +614,17 @@ class Tado:
       {'enabled': True}
     """
 
-    if enabled:
-      payload = { 'enabled': 'true' }
-    else:
-      payload = { 'enabled': 'false' }
+        if enabled:
+            payload = {"enabled": "true"}
+        else:
+            payload = {"enabled": "false"}
 
-    return self._api_call('homes/%i/zones/%i/earlyStart' % (self.id, zone), payload, method='PUT')
+        return self._api_call(
+            "homes/%i/zones/%i/earlyStart" % (self.id, zone), payload, method="PUT"
+        )
 
-  def set_temperature(self, zone, temperature, termination='MANUAL'):
-    """
+    def set_temperature(self, zone, temperature, termination="MANUAL"):
+        """
     Set the desired temperature of a zone.
 
     Args:
@@ -643,24 +661,34 @@ class Tado:
       }
     """
 
-    def get_termination_dict(termination):
-      if termination == 'MANUAL':
-        return { 'type': 'MANUAL' }
-      elif termination == 'AUTO':
-        return { 'type': 'TADO_MODE' }
-      else:
-        return { 'type': 'TIMER', 'durationInSeconds': termination }
-    def get_setting_dict(temperature):
-      if temperature < 5:
-        return { 'type': 'HEATING', 'power': 'OFF' }
-      else:
-        return { 'type': 'HEATING', 'power': 'ON', 'temperature': { 'celsius': temperature } }
+        def get_termination_dict(termination):
+            if termination == "MANUAL":
+                return {"type": "MANUAL"}
+            elif termination == "AUTO":
+                return {"type": "TADO_MODE"}
+            else:
+                return {"type": "TIMER", "durationInSeconds": termination}
 
-    payload = { 'setting': get_setting_dict(temperature),
-                'termination': get_termination_dict(termination)
-              }
-    return self._api_call('homes/%i/zones/%i/overlay' % (self.id, zone), data=payload, method='PUT')
+        def get_setting_dict(temperature):
+            if temperature < 5:
+                return {"type": "HEATING", "power": "OFF"}
+            else:
+                return {
+                    "type": "HEATING",
+                    "power": "ON",
+                    "temperature": {"celsius": temperature},
+                }
 
-  def end_manual_control(self, zone):
-    """End the manual control of a zone."""
-    data = self._api_call('homes/%i/zones/%i/overlay' % (self.id, zone), method='DELETE')
+        payload = {
+            "setting": get_setting_dict(temperature),
+            "termination": get_termination_dict(termination),
+        }
+        return self._api_call(
+            "homes/%i/zones/%i/overlay" % (self.id, zone), data=payload, method="PUT"
+        )
+
+    def end_manual_control(self, zone):
+        """End the manual control of a zone."""
+        data = self._api_call(
+            "homes/%i/zones/%i/overlay" % (self.id, zone), method="DELETE"
+        )
