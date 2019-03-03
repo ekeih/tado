@@ -1,0 +1,27 @@
+exclude: (.idea)
+
+repos:
+- repo: https://github.com/ambv/black
+  rev: stable
+  hooks:
+  - id: black
+    language_version: python3.6
+    types: [python]
+- repo: https://github.com/pre-commit/pre-commit-hooks
+  rev: v2.1.0
+  hooks:
+  - id: check-added-large-files
+  - id: end-of-file-fixer
+  - id: trailing-whitespace
+  - id: check-ast
+  - id: detect-private-key
+
+- repo: local
+  hooks:
+  - id: pylint
+    name: pylint
+    entry: python -m pylint.__main__
+    types: [python]
+    language: system
+    exclude: (migrations|tests)
+    args: ['--disable=fixme,I']
