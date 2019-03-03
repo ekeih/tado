@@ -84,13 +84,15 @@ class Tado:
 
   def refresh_auth(self):
     """Refresh an active session."""
-    url='https://my.tado.com/oauth/token'
-    data = { 'client_id'     : 'tado-webapp',
+    url='https://auth.tado.com/oauth/token'
+    data = { 'client_id'     : 'tado-web-app',
+             'client_secret' : self.secret,
              'grant_type'    : 'refresh_token',
              'refresh_token' : self.refresh_token,
              'scope'         : 'home.user'
            }
     request = self.session.post(url, data=data, headers=self.headers)
+    request.raise_for_status()
     response = request.json()
     self.access_token = response['access_token']
     self.refresh_token = response['refresh_token']
