@@ -8,6 +8,7 @@ authors = ["MrGreenTea <mrlordalfred@gmail.com>"]
 [tool.poetry.dependencies]
 python = "^3.7"
 requests = "^2.21"
+glom = "^19.2"
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.3"
