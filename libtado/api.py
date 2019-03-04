@@ -29,10 +29,14 @@ License:
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 """
+import typing
 from typing import Dict
 from urllib.parse import urljoin
 
 import requests
+
+
+Object = typing.Dict[str, typing.Any]
 
 
 class Tado:
@@ -40,14 +44,14 @@ class Tado:
     api = "https://my.tado.com/api/v2/"
 
     def __init__(self, username, password, secret):
+        """Authenticate to the api."""
         self.username = username
-        self.password = password
         self.secret = secret
 
         self.session = requests.Session()
         self.access_headers = self.headers.copy()
 
-        response = self._login()
+        response = self._login(self.username, password)
         self.access_token = response["access_token"]
         self.refresh_token = response["refresh_token"]
         self.access_headers["Authorization"] = "Bearer " + response["access_token"]
@@ -55,42 +59,43 @@ class Tado:
         self.session.get("https://my.tado.com/api/v1/me", headers=self.access_headers)
         self.id = self.me["homes"][0]["id"]
 
-    def _login(self):
+    def _login(self, username, password):
         """Login and setup the HTTP session."""
         url = "https://auth.tado.com/oauth/token"
         data = {
             "client_id": "tado-web-app",
             "client_secret": self.secret,
             "grant_type": "password",
-            "password": self.password,
+            "password": password,
             "scope": "home.user",
-            "username": self.username,
+            "username": username,
         }
-        request = self.session.post(url, data=data, headers=self.access_headers)
-        request.raise_for_status()
-        response = request.json()
-        return response
 
-    def _api_call(self, cmd, json=None, method="GET"):
+        return self.post(url, data=data)
+
+    def _api_call(self, cmd, json=None, data=None, method="GET"):
         """Perform an API call."""
 
         url = urljoin(self.api, cmd)
 
         response = self.session.request(
-            method, url, json=json, headers=self.access_headers
+            method, url, json=json, data=data, headers=self.access_headers
         )
 
         response.raise_for_status()
         return response.json()
 
-    def get(self, cmd, json=None):
-        return self._api_call(cmd, json=json)
+    def get(self, *args, **kwargs):
+        return self._api_call(*args, **kwargs, method="GET")
 
-    def put(self, cmd, json=None):
-        return self._api_call(cmd, json=json, method="PUT")
+    def post(self, *args, **kwargs):
+        return self._api_call(*args, **kwargs, method="POST")
 
-    def delete(self, cmd, json=None):
-        return self._api_call(cmd, json=json, method="DELETE")
+    def put(self, *args, **kwargs):
+        return self._api_call(*args, **kwargs, method="PUT")
+
+    def delete(self, *args, **kwargs):
+        return self._api_call(*args, **kwargs, method="DELETE")
 
     def refresh_auth(self):
         """Refresh an active session."""
@@ -102,14 +107,16 @@ class Tado:
             "refresh_token": self.refresh_token,
             "scope": "home.user",
         }
+
         request = self.session.post(url, data=data, headers=self.headers)
         request.raise_for_status()
         response = request.json()
+
         self.access_token = response["access_token"]
         self.refresh_token = response["refresh_token"]
         self.access_headers["Authorization"] = "Bearer " + self.access_token
 
-    def get_capabilities(self, zone):
+    def get_capabilities(self, zone) -> Object:
         """
     Args:
       zone (int): The zone ID.
@@ -133,7 +140,7 @@ class Tado:
         return self.get(f"homes/{self.id}/zones/{zone}/capabilities")
 
     @property
-    def devices(self) -> dict:
+    def devices(self) -> typing.List[Dict]:
         """
     Returns:
       list: All devices of the home as a list of dictionaries.
@@ -228,7 +235,7 @@ class Tado:
         return self.get(f"homes/{self.id}/zones/{zone}/earlyStart")["enabled"]
 
     @property
-    def home(self) -> dict:
+    def home(self) -> Dict[str, typing.Any]:
         """
     Get information about the home.
 
@@ -269,7 +276,7 @@ class Tado:
         return self.get(f"homes/{self.id}")
 
     @property
-    def installations(self) -> list:
+    def installations(self) -> typing.List:
         """
     It is unclear what this does.
 
@@ -285,7 +292,7 @@ class Tado:
         return self.get(f"homes/{self.id}/installations")
 
     @property
-    def invitations(self) -> list:
+    def invitations(self) -> typing.List[Object]:
         """
     Get active invitations.
 
@@ -344,7 +351,7 @@ class Tado:
         return self.get(f"homes/{self.id}/invitations")
 
     @property
-    def me(self) -> dict:
+    def me(self) -> Dict[str, typing.Any]:
         """
     Get information about the current user.
 
@@ -374,11 +381,11 @@ class Tado:
         return self.get("me")
 
     @property
-    def mobile_devices(self) -> list:
+    def mobile_devices(self) -> typing.List[Object]:
         """Get all mobile devices."""
         return self.get(f"homes/{self.id}/mobileDevices")
 
-    def get_schedule(self, zone) -> dict:
+    def get_schedule(self, zone) -> Dict[str, typing.Any]:
         """
     Get the type of the currently configured schedule of a zone.
 
@@ -407,7 +414,7 @@ class Tado:
 
         return self.get(f"homes/{self.id}/zones/{zone}/schedule/activeTimetable")
 
-    def get_state(self, zone) -> dict:
+    def get_state(self, zone) -> Dict[str, typing.Any]:
         """
     Get the current state of a zone including its desired and current temperature. Check out the example output for more.
 
@@ -465,11 +472,11 @@ class Tado:
     """
         return self.get(f"homes/{self.id}/zones/{zone}/state")
 
-    def get_users(self) -> list:
+    def get_users(self) -> typing.List[Object]:
         """Get all users of your home."""
         return self.get(f"homes/{self.id}/users")
 
-    def get_weather(self) -> dict:
+    def get_weather(self) -> Dict[str, typing.Any]:
         """
     Get the current weather of the location of your home.
 
@@ -585,7 +592,7 @@ class Tado:
         zones = self.get(f"homes/{self.id}/zones")
         return {zone["id"]: Zone(self, **zone) for zone in zones}
 
-    def set_early_start(self, zone, enabled) -> dict:
+    def set_early_start(self, zone, enabled) -> Dict[str, bool]:
         """
     Enable or disable the early start feature of a zone.
 
@@ -606,7 +613,7 @@ class Tado:
 
         return self.put(f"homes/{self.id}/zones/{zone}/earlyStart", json=payload)
 
-    def set_temperature(self, zone, temperature, termination="MANUAL"):
+    def set_temperature(self, zone, temperature: float, termination="MANUAL") -> Object:
         """
     Set the desired temperature of a zone.
 
@@ -672,10 +679,10 @@ class Tado:
 
 
 class Zone:
-    def __init__(self, tado: Tado, id: int, name: str, **extras):
+    def __init__(self, api: Tado, id: int, name: str, **extras):
         self.id = id
         self.name = name
-        self.api = tado
+        self.api = api
         self.extras = extras
 
     @property
