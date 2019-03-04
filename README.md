@@ -41,13 +41,13 @@ Download the repository. You can work inside it. Beware that the examples assume
 Now you can call it in your Pyhton script!
 
 ```python
-import libtado.api
+from libtado import api
 
 t = api.Tado('my@email.com', 'myPassword', 'client_secret')
 
-print(t.get_me())
-print(t.get_home())
-print(t.get_zones())
+print(t.me)
+print(t.home)
+print(t.zones)
 print(t.get_state(1))
 ```
 
@@ -55,4 +55,3 @@ print(t.get_state(1))
 
 An example script is provided in the repository as `example.py`.
 It shows you how to use the library and expose some structured responses. A more detailed example is available in `libtado/__main__.py`.
-

@@ -29,26 +29,34 @@ License:
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 """
+from typing import Dict
+from urllib.parse import urljoin
 
-import json
 import requests
 
 
 class Tado:
     headers = {"Referer": "https://my.tado.com/"}
-    access_headers = headers
-    api = "https://my.tado.com/api/v2"
+    api = "https://my.tado.com/api/v2/"
 
     def __init__(self, username, password, secret):
         self.username = username
         self.password = password
         self.secret = secret
-        self._login()
-        self.id = self.me()["homes"][0]["id"]
+
+        self.session = requests.Session()
+        self.access_headers = self.headers.copy()
+
+        response = self._login()
+        self.access_token = response["access_token"]
+        self.refresh_token = response["refresh_token"]
+        self.access_headers["Authorization"] = "Bearer " + response["access_token"]
+        # We need to talk to api v1 to get a JSESSIONID cookie
+        self.session.get("https://my.tado.com/api/v1/me", headers=self.access_headers)
+        self.id = self.me["homes"][0]["id"]
 
     def _login(self):
         """Login and setup the HTTP session."""
-        self.session = requests.Session()
         url = "https://auth.tado.com/oauth/token"
         data = {
             "client_id": "tado-web-app",
@@ -59,34 +67,30 @@ class Tado:
             "username": self.username,
         }
         request = self.session.post(url, data=data, headers=self.access_headers)
+        request.raise_for_status()
         response = request.json()
-        self.access_token = response["access_token"]
-        self.refresh_token = response["refresh_token"]
-        self.access_headers["Authorization"] = "Bearer " + response["access_token"]
-        # We need to talk to api v1 to get a JSESSIONID cookie
-        self.session.get("https://my.tado.com/api/v1/me", headers=self.access_headers)
+        return response
 
-    def _api_call(self, cmd, data=False, method="GET"):
+    def _api_call(self, cmd, json=None, method="GET"):
         """Perform an API call."""
 
-        def call_delete(url):
-            return self.session.delete(url, headers=self.access_headers)
+        url = urljoin(self.api, cmd)
 
-        def call_put(url, data):
-            return self.session.put(
-                url, headers=self.access_headers, data=json.dumps(data)
-            )
+        response = self.session.request(
+            method, url, json=json, headers=self.access_headers
+        )
 
-        def call_get(url):
-            return self.session.get(url, headers=self.access_headers)
+        response.raise_for_status()
+        return response.json()
 
-        url = "%s/%s" % (self.api, cmd)
-        if method == "DELETE":
-            return call_delete(url)
-        elif method == "PUT" and data:
-            return call_put(url, data).json()
-        elif method == "GET":
-            return call_get(url).json()
+    def get(self, cmd, json=None):
+        return self._api_call(cmd, json=json)
+
+    def put(self, cmd, json=None):
+        return self._api_call(cmd, json=json, method="PUT")
+
+    def delete(self, cmd, json=None):
+        return self._api_call(cmd, json=json, method="DELETE")
 
     def refresh_auth(self):
         """Refresh an active session."""
@@ -126,11 +130,10 @@ class Tado:
       }
 
     """
-        data = self._api_call("homes/%i/zones/%i/capabilities" % (self.id, zone))
-        return data
+        return self.get(f"homes/{self.id}/zones/{zone}/capabilities")
 
     @property
-    def devices(self):
+    def devices(self) -> dict:
         """
     Returns:
       list: All devices of the home as a list of dictionaries.
@@ -204,10 +207,9 @@ class Tado:
         }
       ]
     """
-        data = self._api_call("homes/%i/devices" % self.id)
-        return data
+        return self.get(f"homes/{self.id}/devices")
 
-    def get_early_start(self, zone):
+    def get_early_start(self, zone) -> bool:
         """
     Get the early start configuration of a zone.
 
@@ -215,7 +217,7 @@ class Tado:
       zone (int): The zone ID.
 
     Returns:
-      dict: A dictionary with the early start setting of the zone. (True or False)
+      bool
 
     Example
     =======
@@ -223,11 +225,10 @@ class Tado:
 
       { 'enabled': True }
     """
-        data = self._api_call("homes/%i/zones/%i/earlyStart" % (self.id, zone))
-        return data
+        return self.get(f"homes/{self.id}/zones/{zone}/earlyStart")["enabled"]
 
     @property
-    def home(self):
+    def home(self) -> dict:
         """
     Get information about the home.
 
@@ -265,11 +266,10 @@ class Tado:
         'temperatureUnit': 'CELSIUS'
       }
     """
-        data = self._api_call("homes/%i" % self.id)
-        return data
+        return self.get(f"homes/{self.id}")
 
     @property
-    def installations(self):
+    def installations(self) -> list:
         """
     It is unclear what this does.
 
@@ -282,11 +282,10 @@ class Tado:
 
       []
     """
-        data = self._api_call("homes/%i/installations" % self.id)
-        return data
+        return self.get(f"homes/{self.id}/installations")
 
     @property
-    def invitations(self):
+    def invitations(self) -> list:
         """
     Get active invitations.
 
@@ -342,11 +341,10 @@ class Tado:
       ]
     """
 
-        data = self._api_call("homes/%i/invitations" % self.id)
-        return data
+        return self.get(f"homes/{self.id}/invitations")
 
     @property
-    def me(self):
+    def me(self) -> dict:
         """
     Get information about the current user.
 
@@ -373,16 +371,14 @@ class Tado:
       }
     """
 
-        data = self._api_call("me")
-        return data
+        return self.get("me")
 
     @property
-    def mobile_devices(self):
+    def mobile_devices(self) -> list:
         """Get all mobile devices."""
-        data = self._api_call("homes/%i/mobileDevices" % self.id)
-        return data
+        return self.get(f"homes/{self.id}/mobileDevices")
 
-    def get_schedule(self, zone):
+    def get_schedule(self, zone) -> dict:
         """
     Get the type of the currently configured schedule of a zone.
 
@@ -409,12 +405,9 @@ class Tado:
       }
     """
 
-        data = self._api_call(
-            "homes/%i/zones/%i/schedule/activeTimetable" % (self.id, zone)
-        )
-        return data
+        return self.get(f"homes/{self.id}/zones/{zone}/schedule/activeTimetable")
 
-    def get_state(self, zone):
+    def get_state(self, zone) -> dict:
         """
     Get the current state of a zone including its desired and current temperature. Check out the example output for more.
 
@@ -470,16 +463,13 @@ class Tado:
         'tadoMode': 'HOME'
       }
     """
+        return self.get(f"homes/{self.id}/zones/{zone}/state")
 
-        data = self._api_call("homes/%i/zones/%i/state" % (self.id, zone))
-        return data
-
-    def get_users(self):
+    def get_users(self) -> list:
         """Get all users of your home."""
-        data = self._api_call("homes/%i/users" % self.id)
-        return data
+        return self.get(f"homes/{self.id}/users")
 
-    def get_weather(self):
+    def get_weather(self) -> dict:
         """
     Get the current weather of the location of your home.
 
@@ -514,11 +504,10 @@ class Tado:
       }
     """
 
-        data = self._api_call("homes/%i/weather" % self.id)
-        return data
+        return self.get(f"homes/{self.id}/weather")
 
     @property
-    def zones(self):
+    def zones(self) -> Dict[int, "Zone"]:
         """
     Get all zones of your home.
 
@@ -593,10 +582,10 @@ class Tado:
 
     """
 
-        data = self._api_call("homes/%i/zones" % self.id)
-        return data
+        zones = self.get(f"homes/{self.id}/zones")
+        return {zone["id"]: Zone(self, **zone) for zone in zones}
 
-    def set_early_start(self, zone, enabled):
+    def set_early_start(self, zone, enabled) -> dict:
         """
     Enable or disable the early start feature of a zone.
 
@@ -613,15 +602,9 @@ class Tado:
 
       {'enabled': True}
     """
+        payload = {"enabled": enabled}
 
-        if enabled:
-            payload = {"enabled": "true"}
-        else:
-            payload = {"enabled": "false"}
-
-        return self._api_call(
-            "homes/%i/zones/%i/earlyStart" % (self.id, zone), payload, method="PUT"
-        )
+        return self.put(f"homes/{self.id}/zones/{zone}/earlyStart", json=payload)
 
     def set_temperature(self, zone, temperature, termination="MANUAL"):
         """
@@ -661,7 +644,7 @@ class Tado:
       }
     """
 
-        def get_termination_dict(termination):
+        def get_termination_dict():
             if termination == "MANUAL":
                 return {"type": "MANUAL"}
             elif termination == "AUTO":
@@ -669,7 +652,7 @@ class Tado:
             else:
                 return {"type": "TIMER", "durationInSeconds": termination}
 
-        def get_setting_dict(temperature):
+        def get_setting_dict():
             if temperature < 5:
                 return {"type": "HEATING", "power": "OFF"}
             else:
@@ -679,16 +662,44 @@ class Tado:
                     "temperature": {"celsius": temperature},
                 }
 
-        payload = {
-            "setting": get_setting_dict(temperature),
-            "termination": get_termination_dict(termination),
-        }
-        return self._api_call(
-            "homes/%i/zones/%i/overlay" % (self.id, zone), data=payload, method="PUT"
-        )
+        payload = {"setting": get_setting_dict(), "termination": get_termination_dict()}
+
+        return self.put(f"homes/{self.id}/zones/{zone}/overlay", json=payload)
 
     def end_manual_control(self, zone):
         """End the manual control of a zone."""
-        data = self._api_call(
-            "homes/%i/zones/%i/overlay" % (self.id, zone), method="DELETE"
-        )
+        return self.delete(f"homes/{self.id}/zones/{zone}/overlay")
+
+
+class Zone:
+    def __init__(self, tado: Tado, id: int, name: str, **extras):
+        self.id = id
+        self.name = name
+        self.api = tado
+        self.extras = extras
+
+    @property
+    def schedule(self):
+        return self.api.get_schedule(self.id)
+
+    @property
+    def early_start(self):
+        return self.api.get_early_start(self.id)
+
+    @early_start.setter
+    def early_start(self, val):
+        self.api.set_early_start(self.id, val)
+
+    @property
+    def state(self):
+        return self.api.get_state(self.id)
+
+    @property
+    def capabilities(self):
+        return self.api.get_capabilities(self.id)
+
+    def end_manual_control(self):
+        return self.api.end_manual_control(self.id)
+
+    def set_temperature(self, temperature, termination="MANUAL"):
+        return self.api.set_temperature(self.id, temperature, termination=termination)
