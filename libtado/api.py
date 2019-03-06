@@ -29,14 +29,33 @@ License:
   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 """
+import functools
 import typing
+from json import JSONDecodeError
 from typing import Dict
 from urllib.parse import urljoin
 
+import cachetools
+import glom
 import requests
 
-
 Object = typing.Dict[str, typing.Any]
+
+
+def cached_property(
+    prop=None, *, maxsize=16, ttl=60
+) -> typing.Union[functools.partial, property]:
+    if prop is None:
+        return functools.partial(cached_property, maxsize=maxsize, ttl=ttl)
+
+    def cache_getter(obj):
+        if not hasattr(obj, "__cache__"):
+            obj.__cache__ = cachetools.TTLCache(maxsize, ttl)
+        return obj.__cache__
+
+    return property(
+        cachetools.cachedmethod(cache_getter, key=lambda: prop.__name__)(prop)
+    )
 
 
 class Tado:
@@ -58,6 +77,8 @@ class Tado:
         # We need to talk to api v1 to get a JSESSIONID cookie
         self.session.get("https://my.tado.com/api/v1/me", headers=self.access_headers)
         self.id = self.me["homes"][0]["id"]
+        home = self.home
+        self.temperature_unit = glom.glom(home, ("temperatureUnit", glom.T.lower()))
 
     def _login(self, username, password):
         """Login and setup the HTTP session."""
@@ -83,7 +104,10 @@ class Tado:
         )
 
         response.raise_for_status()
-        return response.json()
+        try:
+            return response.json()
+        except JSONDecodeError:
+            return None
 
     def get(self, *args, **kwargs):
         return self._api_call(*args, **kwargs, method="GET")
@@ -116,6 +140,10 @@ class Tado:
         self.refresh_token = response["refresh_token"]
         self.access_headers["Authorization"] = "Bearer " + self.access_token
 
+    @property
+    def presence(self):
+        return self.get(f"homes/{self.id}/presence")
+
     def get_capabilities(self, zone) -> Object:
         """
     Args:
@@ -139,7 +167,7 @@ class Tado:
     """
         return self.get(f"homes/{self.id}/zones/{zone}/capabilities")
 
-    @property
+    @cached_property
     def devices(self) -> typing.List[Dict]:
         """
     Returns:
@@ -234,7 +262,7 @@ class Tado:
     """
         return self.get(f"homes/{self.id}/zones/{zone}/earlyStart")["enabled"]
 
-    @property
+    @cached_property
     def home(self) -> Dict[str, typing.Any]:
         """
     Get information about the home.
@@ -276,6 +304,10 @@ class Tado:
         return self.get(f"homes/{self.id}")
 
     @property
+    def home_state(self):
+        return self.get(f"homes/{self.id}/state")
+
+    @cached_property
     def installations(self) -> typing.List:
         """
     It is unclear what this does.
@@ -291,7 +323,7 @@ class Tado:
     """
         return self.get(f"homes/{self.id}/installations")
 
-    @property
+    @cached_property
     def invitations(self) -> typing.List[Object]:
         """
     Get active invitations.
@@ -350,7 +382,7 @@ class Tado:
 
         return self.get(f"homes/{self.id}/invitations")
 
-    @property
+    @cached_property
     def me(self) -> Dict[str, typing.Any]:
         """
     Get information about the current user.
@@ -380,7 +412,7 @@ class Tado:
 
         return self.get("me")
 
-    @property
+    @cached_property
     def mobile_devices(self) -> typing.List[Object]:
         """Get all mobile devices."""
         return self.get(f"homes/{self.id}/mobileDevices")
@@ -472,11 +504,13 @@ class Tado:
     """
         return self.get(f"homes/{self.id}/zones/{zone}/state")
 
-    def get_users(self) -> typing.List[Object]:
+    @cached_property
+    def users(self) -> typing.List[Object]:
         """Get all users of your home."""
         return self.get(f"homes/{self.id}/users")
 
-    def get_weather(self) -> Dict[str, typing.Any]:
+    @cached_property
+    def weather(self) -> Dict[str, typing.Any]:
         """
     Get the current weather of the location of your home.
 
@@ -513,7 +547,7 @@ class Tado:
 
         return self.get(f"homes/{self.id}/weather")
 
-    @property
+    @cached_property
     def zones(self) -> Dict[int, "Zone"]:
         """
     Get all zones of your home.
@@ -685,11 +719,11 @@ class Zone:
         self.api = api
         self.extras = extras
 
-    @property
+    @cached_property
     def schedule(self):
         return self.api.get_schedule(self.id)
 
-    @property
+    @cached_property
     def early_start(self):
         return self.api.get_early_start(self.id)
 
@@ -697,13 +731,24 @@ class Zone:
     def early_start(self, val):
         self.api.set_early_start(self.id, val)
 
-    @property
+    @cached_property
     def state(self):
         return self.api.get_state(self.id)
 
-    @property
+    @cached_property
     def capabilities(self):
         return self.api.get_capabilities(self.id)
+
+    @property
+    def inside_temperature(self) -> float:
+        return glom.glom(
+            self.state,
+            ("sensorDataPoints.insideTemperature", self.api.temperature_unit),
+        )
+
+    @property
+    def humidity(self) -> float:
+        return glom.glom(self.state, "sensorDataPoints.humidity.percentage")
 
     def end_manual_control(self):
         return self.api.end_manual_control(self.id)
