@@ -10,6 +10,7 @@ python = "^3.7"
 requests = "^2.21"
 glom = "^19.2"
 cachetools = "^3.1"
+aiohttp = "^3.5"
 
 [tool.poetry.dev-dependencies]
 pylint = "^2.3"
